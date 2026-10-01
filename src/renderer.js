@@ -9,6 +9,20 @@ const MATHLIVE_MENU_SWATCH_FIX_CSS = `
 }
 `;
 
+// Upright Euler Greek for the \up... macros (see the macros setup below).
+// MathLive atoms set an explicit KaTeX font, hence the wrapper class from
+// \class{euler-upgreek}{...} for specificity. Euler has no italics, so the
+// style is forced to normal to avoid synthesized oblique. Both atom classes
+// are covered: most variant letters parse as .lcGreek, but U+03F5 parses
+// as .ML__cmr.
+const EULER_UPGREEK_CSS = `
+.euler-upgreek .lcGreek,
+.euler-upgreek .ML__cmr {
+  font-family: 'MacMathEulerUpgreek', 'KaTeX_Main', serif;
+  font-style: normal;
+}
+`;
+
 function installMathLiveMenuSwatchFix(shadowRoot) {
   if (!(shadowRoot instanceof ShadowRoot)) return;
   if (shadowRoot.host?.tagName !== 'MATH-FIELD') return;
@@ -16,7 +30,7 @@ function installMathLiveMenuSwatchFix(shadowRoot) {
 
   const style = document.createElement('style');
   style.setAttribute(MATHLIVE_MENU_SWATCH_FIX_ATTR, '');
-  style.textContent = MATHLIVE_MENU_SWATCH_FIX_CSS;
+  style.textContent = MATHLIVE_MENU_SWATCH_FIX_CSS + EULER_UPGREEK_CSS;
   shadowRoot.appendChild(style);
 }
 
@@ -65,12 +79,32 @@ window.addEventListener('DOMContentLoaded', () => {
     window.MathfieldElement.scientificNotationTemplate = '';
   }
 
+  // Upright ("upvar") Greek variants from the upgreek package, rendered with
+  // the bundled Euler font via \class (MathLive has no native \up...
+  // commands). The copied LaTeX keeps the original \up... commands. The
+  // codepoints follow upgreek semantics: \upvarsigma and \upvarrho render
+  // as \upsigma and \uprho.
+  mathField.macros = {
+    ...mathField.macros,
+    upphi: '\\class{euler-upgreek}{\u03D5}',
+    upvarphi: '\\class{euler-upgreek}{\u03C6}',
+    upvarsigma: '\\class{euler-upgreek}{\u03C3}',
+    upvarepsilon: '\\class{euler-upgreek}{\u03F5}',
+    upvartheta: '\\class{euler-upgreek}{\u03D1}',
+    upvarpi: '\\class{euler-upgreek}{\u03D6}',
+    upvarrho: '\\class{euler-upgreek}{\u03C1}'
+  };
+
   const greekKey = (latex, aside, shift) => ({
     latex,
     aside,
     shift,
     class: 'MLK__tex hide-shift'
   });
+  // Shift on a variant key gives its upright upgreek form. The label is set
+  // explicitly in the Euler font because keyboard labels render without
+  // the mathfield's custom macros.
+  const upvarShift = (entity, latex) => ({ label: `<span class="euler-kbd">&#x${entity};</span>`, latex });
   const optionToggle = {
     label: 'Option',
     class: 'action bottom left',
@@ -78,8 +112,8 @@ window.addEventListener('DOMContentLoaded', () => {
   };
   const greekRows = [
     [
-      greekKey('\\varphi', 'phi var.', '\\Phi'),
-      greekKey('\\varsigma', 'sigma var.', '\\Sigma'),
+      greekKey('\\varphi', 'phi var.', upvarShift('03C6', '\\upvarphi')),
+      greekKey('\\varsigma', 'sigma var.', upvarShift('03C3', '\\upvarsigma')),
       greekKey('\\epsilon', 'epsilon', '\\char"0190'),
       greekKey('\\rho', 'rho', '\\char"3A1'),
       greekKey('\\tau', 'tau', '\\char"3A4'),
@@ -115,11 +149,11 @@ window.addEventListener('DOMContentLoaded', () => {
     ],
     [
       optionToggle,
-      greekKey('\\varepsilon', 'epsilon var.'),
-      greekKey('\\vartheta', 'theta var.'),
-      greekKey('\\varkappa', 'kappa var.'),
-      greekKey('\\varpi', 'pi var.'),
-      greekKey('\\varrho', 'rho var.'),
+      greekKey('\\varepsilon', 'epsilon var.', upvarShift('03F5', '\\upvarepsilon')),
+      greekKey('\\vartheta', 'theta var.', upvarShift('03D1', '\\upvartheta')),
+      greekKey('\\varkappa', 'kappa var.', '\\Kappa'),
+      greekKey('\\varpi', 'pi var.', upvarShift('03D6', '\\upvarpi')),
+      greekKey('\\varrho', 'rho var.', upvarShift('03C1', '\\upvarrho')),
       '[left]',
       '[right]',
       '[action]'
@@ -141,6 +175,25 @@ window.addEventListener('DOMContentLoaded', () => {
     '\\varpi': '\\pi',
     '\\varrho': '\\rho'
   };
+  // Shift on the Option layer, keyed by the displayed (Option-layer) letter:
+  // upright upgreek forms for variant letters, standard capitals for the
+  // rest (including the bottom-row keys, whose Option form is non-variant).
+  // Note: upgreek has no \upvarkappa, so kappa keeps its shift value.
+  const greekOptionShifts = {
+    '\\phi': { label: '<span class="euler-kbd">&#x03D5;</span>', latex: '\\upphi' },
+    '\\varphi': { label: '<span class="euler-kbd">&#x03C6;</span>', latex: '\\upvarphi' },
+    '\\sigma': { label: '<span class="euler-kbd">&#x03C3;</span>', latex: '\\upvarsigma' },
+    '\\varsigma': { label: '<span class="euler-kbd">&#x03C3;</span>', latex: '\\upvarsigma' },
+    '\\varepsilon': { label: '<span class="euler-kbd">&#x03F5;</span>', latex: '\\upvarepsilon' },
+    '\\vartheta': { label: '<span class="euler-kbd">&#x03D1;</span>', latex: '\\upvartheta' },
+    '\\varpi': { label: '<span class="euler-kbd">&#x03D6;</span>', latex: '\\upvarpi' },
+    '\\varrho': { label: '<span class="euler-kbd">&#x03C1;</span>', latex: '\\upvarrho' },
+    '\\epsilon': '\\char"0190',
+    '\\theta': '\\Theta',
+    '\\kappa': '\\Kappa',
+    '\\pi': '\\Pi',
+    '\\rho': '\\char"3A1'
+  };
   const greekOptionRows = greekRows.map((row) => row.map((keycap) => {
     if (keycap === optionToggle) {
       return {
@@ -149,8 +202,11 @@ window.addEventListener('DOMContentLoaded', () => {
         command: ['switchKeyboardLayer', 'macmath-greek']
       };
     }
-    if (typeof keycap === 'string' || !greekOptionAlternatives[keycap.latex]) return keycap;
-    return { ...keycap, latex: greekOptionAlternatives[keycap.latex] };
+    if (typeof keycap === 'string') return keycap;
+    const latex = greekOptionAlternatives[keycap.latex] ?? keycap.latex;
+    const shift = greekOptionShifts[latex] ?? keycap.shift;
+    if (latex === keycap.latex && shift === keycap.shift) return keycap;
+    return { ...keycap, latex, shift };
   }));
   window.mathVirtualKeyboard.layouts = [
     'numeric',
@@ -395,6 +451,34 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const copyBtnTimers = new Map();
 
+  // MathLive's native copy/cut (Cmd+C/X on a selection, Edit menu) exports
+  // with "latex-expanded", which expands our custom \up... macros to
+  // \mathrm{...}. Intercept events carrying such commands and export the
+  // unexpanded LaTeX instead, matching the Copy LaTeX button. Everything
+  // else is left to MathLive.
+  function interceptNativeClipboard(e, isCut) {
+    if (!(e.target instanceof Node) || !mathField.contains(e.target)) return;
+    if (!e.clipboardData) return;
+    let latex;
+    try {
+      latex = mathField.selectionIsCollapsed
+        ? mathField.getValue('latex')
+        : mathField.getValue(mathField.selection, 'latex');
+    } catch {
+      return;
+    }
+    if (!/\\up[A-Za-z]/.test(latex)) return;
+    e.clipboardData.setData('text/plain', latex);
+    e.clipboardData.setData('application/x-latex', latex);
+    e.preventDefault();
+    e.stopPropagation();
+    if (isCut && !mathField.selectionIsCollapsed) {
+      mathField.executeCommand('deleteBackward');
+    }
+  }
+  mathField.addEventListener('copy', (e) => interceptNativeClipboard(e, false), true);
+  mathField.addEventListener('cut', (e) => interceptNativeClipboard(e, true), true);
+
   function flashCopied(btn) {
     // Clear any existing timer to prevent race conditions
     if (copyBtnTimers.has(btn)) clearTimeout(copyBtnTimers.get(btn));
@@ -616,10 +700,33 @@ window.addEventListener('DOMContentLoaded', () => {
     return toNumericEntities(serializeMathML());
   }
 
+  // Upright upgreek glyphs for MathML export. In the editor the \up...
+  // commands render with Euler via \class wrappers, but MathLive drops
+  // \class content from MathML, so they become their literal upright glyphs
+  // here, which serialize as plain <mi>. Codepoints follow upgreek
+  // semantics: \upvarsigma and \upvarrho render as \upsigma and \uprho.
+  const UPVAR_GLYPHS = {
+    '\\upphi': '\u03D5',
+    '\\upvarphi': '\u03C6',
+    '\\upvarsigma': '\u03C3',
+    '\\upvarepsilon': '\u03F5',
+    '\\upvartheta': '\u03D1',
+    '\\upvarpi': '\u03D6',
+    '\\upvarrho': '\u03C1'
+  };
+  const UPVAR_PATTERN = /\\up(?:varphi|varsigma|varepsilon|vartheta|varpi|varrho|phi)(?![a-zA-Z])/g;
+
+  function expandUpvarGlyphs(latex) {
+    return latex.replace(UPVAR_PATTERN, (command) => UPVAR_GLYPHS[command] ?? command);
+  }
+
   function serializeMathML() {
-    const latex = mathField.getValue('latex');
+    const rawLatex = mathField.getValue('latex');
+    const latex = expandUpvarGlyphs(rawLatex);
     const commands = MARKED_COMMANDS.filter(({ command }) => latex.includes(`${command}{`));
-    if (commands.length === 0) return mathField.getValue('math-ml');
+    if (commands.length === 0 && latex === rawLatex) {
+      return mathField.getValue('math-ml');
+    }
 
     let marked = latex;
     for (const { command, standIn, marker, keep } of commands) {
