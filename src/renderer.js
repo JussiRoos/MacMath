@@ -61,7 +61,112 @@ window.addEventListener('DOMContentLoaded', () => {
 
   mathField.mathVirtualKeyboardPolicy = 'manual';
   // Keep numbers as typed: MathLive would otherwise rewrite 3e2 as 3\times10^{2}.
-  MathfieldElement.scientificNotationTemplate = '';
+  if (window.MathfieldElement) {
+    window.MathfieldElement.scientificNotationTemplate = '';
+  }
+
+  const greekKey = (latex, aside, shift) => ({
+    latex,
+    aside,
+    shift,
+    class: 'MLK__tex hide-shift'
+  });
+  const optionToggle = {
+    label: 'Option',
+    class: 'action bottom left',
+    command: ['switchKeyboardLayer', 'macmath-greek-variants']
+  };
+  const greekRows = [
+    [
+      greekKey('\\varphi', 'phi var.', '\\Phi'),
+      greekKey('\\varsigma', 'sigma var.', '\\Sigma'),
+      greekKey('\\epsilon', 'epsilon', '\\char"0190'),
+      greekKey('\\rho', 'rho', '\\char"3A1'),
+      greekKey('\\tau', 'tau', '\\char"3A4'),
+      greekKey('\\upsilon', 'upsilon', '\\Upsilon'),
+      greekKey('\\theta', 'theta', '\\Theta'),
+      greekKey('\\iota', 'iota', '\\char"399'),
+      greekKey('\\omicron', 'omicron', '\\char"39F'),
+      greekKey('\\pi', 'pi', '\\Pi')
+    ],
+    [
+      '[separator-5]',
+      greekKey('\\alpha', 'alpha', '\\char"391'),
+      greekKey('\\sigma', 'sigma', '\\Sigma'),
+      greekKey('\\delta', 'delta', '\\Delta'),
+      greekKey('\\phi', 'phi', '\\Phi'),
+      greekKey('\\gamma', 'gamma', '\\Gamma'),
+      greekKey('\\eta', 'eta', '\\char"397'),
+      greekKey('\\xi', 'xi', '\\Xi'),
+      greekKey('\\kappa', 'kappa', '\\Kappa'),
+      greekKey('\\lambda', 'lambda', '\\Lambda'),
+      '[separator-5]'
+    ],
+    [
+      '[shift]',
+      greekKey('\\zeta', 'zeta', '\\char"396'),
+      greekKey('\\chi', 'chi', '\\char"3A7'),
+      greekKey('\\psi', 'psi', '\\Psi'),
+      greekKey('\\omega', 'omega', '\\Omega'),
+      greekKey('\\beta', 'beta', '\\char"392'),
+      greekKey('\\nu', 'nu', '\\char"39D'),
+      greekKey('\\mu', 'mu', '\\char"39C'),
+      '[backspace]'
+    ],
+    [
+      optionToggle,
+      greekKey('\\varepsilon', 'epsilon var.'),
+      greekKey('\\vartheta', 'theta var.'),
+      greekKey('\\varkappa', 'kappa var.'),
+      greekKey('\\varpi', 'pi var.'),
+      greekKey('\\varrho', 'rho var.'),
+      '[left]',
+      '[right]',
+      '[action]'
+    ]
+  ];
+  const greekOptionAlternatives = {
+    '\\varphi': '\\phi',
+    '\\varsigma': '\\sigma',
+    '\\epsilon': '\\varepsilon',
+    '\\rho': '\\varrho',
+    '\\theta': '\\vartheta',
+    '\\pi': '\\varpi',
+    '\\sigma': '\\varsigma',
+    '\\phi': '\\varphi',
+    '\\kappa': '\\varkappa',
+    '\\varepsilon': '\\epsilon',
+    '\\vartheta': '\\theta',
+    '\\varkappa': '\\kappa',
+    '\\varpi': '\\pi',
+    '\\varrho': '\\rho'
+  };
+  const greekOptionRows = greekRows.map((row) => row.map((keycap) => {
+    if (keycap === optionToggle) {
+      return {
+        label: 'Option',
+        class: 'action bottom left is-active',
+        command: ['switchKeyboardLayer', 'macmath-greek']
+      };
+    }
+    if (typeof keycap === 'string' || !greekOptionAlternatives[keycap.latex]) return keycap;
+    return { ...keycap, latex: greekOptionAlternatives[keycap.latex] };
+  }));
+  window.mathVirtualKeyboard.layouts = [
+    'numeric',
+    'symbols',
+    'alphabetic',
+    {
+      id: 'macmath-greek',
+      label: '&alpha;&beta;&gamma;',
+      labelClass: 'MLK__tex-math',
+      tooltip: 'Greek',
+      layers: [
+        { id: 'macmath-greek', rows: greekRows },
+        { id: 'macmath-greek-variants', rows: greekOptionRows }
+      ]
+    }
+  ];
 
   // --- Theme toggle ---
 
@@ -117,7 +222,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   setEditorHeight(editorHeight);
 
-  mathVirtualKeyboard.container = kbContainer;
+  window.mathVirtualKeyboard.container = kbContainer;
 
   function setEditorHeight(height) {
     if (height === appliedEditorHeight) return;
@@ -211,19 +316,45 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   window.addEventListener('resize', syncWindowSize);
 
-  mathField.addEventListener('focusin', () => mathVirtualKeyboard.show());
+  mathField.addEventListener('focusin', () => window.mathVirtualKeyboard.show());
 
   mathField.addEventListener('focusout', () => {
     setTimeout(() => {
       if (!mathField.matches(':focus-within') && !mathField.matches(':focus')) {
-        mathVirtualKeyboard.hide();
+        window.mathVirtualKeyboard.hide();
       }
     }, 150);
   });
 
-  mathVirtualKeyboard.addEventListener('geometrychange', () => {
+  window.mathVirtualKeyboard.addEventListener('geometrychange', () => {
     syncWindowSize();
   });
+
+  // Holding the physical Option key (Alt) while the Greek layout is visible
+  // momentarily switches to the variants layer, mirroring how Shift shows
+  // shifted keycaps. Releasing Option switches back.
+  let optionHeldLayer = null;
+  function restoreGreekLayer() {
+    if (!optionHeldLayer) return;
+    const base = optionHeldLayer;
+    optionHeldLayer = null;
+    const kb = window.mathVirtualKeyboard;
+    if (kb && kb.visible && kb.currentLayer !== base) {
+      kb.executeCommand(['switchKeyboardLayer', base]);
+    }
+  }
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Alt' || e.repeat || e.ctrlKey || e.metaKey) return;
+    const kb = window.mathVirtualKeyboard;
+    if (!kb || !kb.visible || kb.currentLayer !== 'macmath-greek') return;
+    optionHeldLayer = 'macmath-greek';
+    kb.executeCommand(['switchKeyboardLayer', 'macmath-greek-variants']);
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (e.key !== 'Alt') return;
+    restoreGreekLayer();
+  }, true);
+  window.addEventListener('blur', restoreGreekLayer);
 
   // --- Text mode toggle ---
 
@@ -834,22 +965,29 @@ window.addEventListener('DOMContentLoaded', () => {
     '\u03B2': '\\beta',
     '\u03B3': '\\gamma',
     '\u03B4': '\\delta',
-    '\u03B5': '\\epsilon',
+    '\u03B5': '\\varepsilon',
+    '\u03F5': '\\epsilon',
     '\u03B6': '\\zeta',
     '\u03B7': '\\eta',
     '\u03B8': '\\theta',
+    '\u03D1': '\\vartheta',
     '\u03B9': '\\iota',
     '\u03BA': '\\kappa',
+    '\u03F0': '\\varkappa',
     '\u03BB': '\\lambda',
     '\u03BC': '\\mu',
     '\u03BD': '\\nu',
     '\u03BE': '\\xi',
     '\u03C0': '\\pi',
+    '\u03D6': '\\varpi',
     '\u03C1': '\\rho',
+    '\u03F1': '\\varrho',
     '\u03C3': '\\sigma',
+    '\u03C2': '\\varsigma',
     '\u03C4': '\\tau',
     '\u03C5': '\\upsilon',
-    '\u03C6': '\\phi',
+    '\u03C6': '\\varphi',
+    '\u03D5': '\\phi',
     '\u03C7': '\\chi',
     '\u03C8': '\\psi',
     '\u03C9': '\\omega',
